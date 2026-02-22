@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公司新人冒險之旅 2.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        :root { --primary: #3498db; --secondary: #e67e22; --success: #2ecc71; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
+        .game-card { max-width: 500px; margin: 40px auto; background: white; padding: 30px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; }
+        
+        /* 進度條 */
+        .progress-container { background: #eee; border-radius: 20px; height: 20px; margin: 25px 0; overflow: hidden; position: relative; }
+        .progress-bar { background: linear-gradient(90deg, #2ecc71, #27ae60); width: 0%; height: 100%; transition: 1s ease-out; }
+        #percentText { position: absolute; width: 100%; text-align: center; font-size: 12px; line-height: 20px; color: #333; font-weight: bold; }
+
+        /* 任務清單 */
+        .task-group { margin-top: 20px; }
+        .task-item { display: flex; align-items: center; padding: 15px; border-bottom: 1px solid #f0f0f0; transition: 0.3s; }
+        .task-item:last-child { border: none; }
+        .task-item input { margin-right: 15px; width: 22px; height: 22px; cursor: pointer; }
+        .completed-text { text-decoration: line-through; color: #bdc3c7; }
+
+        /* 召喚按鈕與彈窗 (沿用之前樣式) */
+        .summon-btn { position: fixed; bottom: 30px; right: 30px; width: 80px; height: 80px; border-radius: 50%; 
+                      background: var(--secondary); color: white; border: none; cursor: pointer; font-weight: bold;
+                      box-shadow: 0 5px 15px rgba(230, 126, 34, 0.4); z-index: 100; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; }
+        .modal-content { background: white; width: 350px; margin: 100px auto; padding: 25px; border-radius: 15px; text-align: center; }
+        textarea { width: 100%; margin: 15px 0; padding: 10px; box-sizing: border-box; border-radius: 8px; border: 1px solid #ddd; }
+        .send-btn { background: var(--success); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; width: 100%; font-size: 16px; }
+    </style>
+</head>
+<body>
+
+<div class="game-card">
+    <h1>🛡️ 新人試煉冒險</h1>
+    <p style="text-align: center; color: #7f8c8d;">冒險等級：<span id="levelText">新手村民</span></p>
+    
+    <div class="progress-container">
+        <div id="percentText">0%</div>
+        <div id="pBar" class="progress-bar"></div>
+    </div>
+
+    <div class="task-group" id="taskList">
+        <div class="task-item"><input type="checkbox" id="t1" onchange="update()"> <span>[第一週] 與導師進行 1-on-1 訪談</span></div>
+        <div class="task-item"><input type="checkbox" id="t2" onchange="update()"> <span>[第一月] 參與並觀察一次正式會議</span></div>
+        <div class="task-item"><input type="checkbox" id="t3" onchange="update()"> <span>[第二月] 完成第一份個人專案報告</span></div>
+        <div class="task-item"><input type="checkbox" id="t4" onchange="update()"> <span>[第三月] 提交適應期回饋並通過考核</span></div>
+    </div>
+</div>
+
+<button class="summon-btn" onclick="openModal()">召喚<br>導師</button>
+
+<div id="mentorModal" class="modal">
+    <div class="modal-content">
+        <h3>🧙‍♂️ 導師召喚陣</h3>
+        <textarea id="msg" rows="4" placeholder="冒險者，描述你的困惑..."></textarea>
+        <button class="send-btn" onclick="sendRequest()">正式發送召喚令</button>
+        <p onclick="closeModal()" style="margin-top: 15px; color: #95a5a6; cursor: pointer;">暫時撤退</p>
+    </div>
+</div>
+
+<script>
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwOONb7tyXbK9OQAl0qrbp2HHLQ6pyyK7qPaHGvKp95utPd0GeRImD6ZmmcbZBEIAgu/exec'; // 👈 記得貼回你的網址！
+
+    // 當頁面載入時，從瀏覽器取出舊紀錄
+    window.onload = function() {
+        const savedData = JSON.parse(localStorage.getItem('newbieProgress') || '{}');
+        Object.keys(savedData).forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.checked = savedData[id];
+        });
+        update();
+    };
+
+    function update() {
+        const checks = document.querySelectorAll('input[type="checkbox"]');
+        const checked = document.querySelectorAll('input[type="checkbox"]:checked');
+        const progress = (checked.length / checks.length) * 100;
+
+        // 更新進度條與文字
+        document.getElementById('pBar').style.width = progress + '%';
+        document.getElementById('percentText').innerText = Math.round(progress) + '%';
+        
+        // 更新稱號
+        const levelText = document.getElementById('levelText');
+        if(progress === 100) {
+            levelText.innerText = "🏆 榮耀騎士 (任務達成！)";
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } }); // 觸發灑花
+        } else if (progress >= 50) { levelText.innerText = "⚔️ 見習戰士"; }
+        else { levelText.innerText = "新手村民"; }
+
+        // [A] 進度記憶：將勾選狀態存入 localStorage
+        const status = {};
+        checks.forEach(el => status[el.id] = el.checked);
+        localStorage.setItem('newbieProgress', JSON.stringify(status));
+
+        // 切換文字劃線樣式
+        checks.forEach(el => {
+            el.nextElementSibling.classList.toggle('completed-text', el.checked);
+        });
+    }
+
+    // 彈窗與寄信邏輯 (沿用之前的)
+    function openModal() { document.getElementById('mentorModal').style.display = 'block'; }
+    function closeModal() { document.getElementById('mentorModal').style.display = 'none'; }
+
+    async function sendRequest() {
+        const msg = document.getElementById('msg').value;
+        if(!msg) return alert("請填寫問題內容");
+        const btn = document.querySelector(".send-btn");
+        btn.innerText = "傳送中..."; btn.disabled = true;
+
+        try {
+            await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ message: msg }) });
+            alert("✨ 召喚成功！");
+            document.getElementById('msg').value = "";
+            closeModal();
+        } catch (e) { alert("發送失敗"); }
+        finally { btn.innerText = "正式發送召喚令"; btn.disabled = false; }
+    }
+</script>
+
+</body>
+</html>
